@@ -1,4 +1,4 @@
-Adafruit_ESP8266
+SimpleESP8266
 ================
 
-Example code for ESP8266 chipset
+Easy to use code for interfacing with the ESP8266 via an Arduino
