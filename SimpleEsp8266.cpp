@@ -16,6 +16,14 @@ MIT license, all text above must be included in any redistribution.
 
 #include "SimpleESP8266.h"
 
+//#define DEBUG_ENABLED
+#ifdef DEBUG_ENABLED
+#define DEBUG_STR(the_str) F(the_str)
+#else
+const char no_debug_string[] PROGMEM  = "DBGOFF";
+#define DEBUG_STR(the_str) no_debug_string
+#endif
+
 //This type is needed because a function which takes an F() string (i.e.
 //  PROGMEM-resident string) cannot be directly passed into functions such as 
 //  strlen_P. Casting the value to Pchr allows strlen_P to read the value
@@ -26,7 +34,6 @@ SimpleESP8266::SimpleESP8266(Stream *stream, Stream *debug, int8_t reset_pin) :
     stream_(stream), debug_(debug), reset_pin_(reset_pin), host_(NULL), writing_(false)
 {
     setDefaultTimeouts();
-    boot_marker_ = defaultBootMarker;
     indent_ = "  ";
 };
 
@@ -88,11 +95,6 @@ void SimpleESP8266::setDefaultTimeouts()
     }
     data_timeout_ = ESP_DATA_TIMEOUT;
 }
-// Override boot marker string, or pass NULL to restore default.
-void SimpleESP8266::setBootMarker(EspStr *s)
-{
-    boot_marker_ = s ? s : defaultBootMarker;
-}
 
 // Anything printed to the EPS8266 object will be split to both the WiFi
 // and debug_ streams.  Saves having to print everything twice in debug_ code.
@@ -105,9 +107,9 @@ size_t SimpleESP8266::write(uint8_t c)
         writing_ = true;
         if (debug_)
         {
-            debug_->print(F("\r\n"));
+            debug_->print(DEBUG_STR("\r\n"));
             debug_->print(indent_);
-            debug_->print(F("-S->"));
+            debug_->print(DEBUG_STR("-S->"));
         }
     }
     if (debug_)
@@ -160,14 +162,14 @@ boolean SimpleESP8266::find(EspStr *search_str, boolean ipd, boolean verbose)
 
     if (debug_ && writing_)
     {
-        debug_->println(F("<-S-"));
+        debug_->println(DEBUG_STR("<-S-"));
     }
     writing_ = false;
 
     if (debug_)
     {
         debug_->print(indent_);
-        debug_->print(F("Searching for: '"));
+        debug_->print(DEBUG_STR("Search for: '"));
         uint8_t strpos = 0;
         char next_char = 1;
         while (next_char != '\0')
@@ -176,7 +178,7 @@ boolean SimpleESP8266::find(EspStr *search_str, boolean ipd, boolean verbose)
             strpos++;
             escapedDebugWrite(next_char);
         }
-        debug_->print(F("'..."));
+        debug_->print(DEBUG_STR("'..."));
         debug_->flush();
     }
 
@@ -194,18 +196,19 @@ boolean SimpleESP8266::find(EspStr *search_str, boolean ipd, boolean verbose)
         }
         if (find(F("+IPD,")))
         {
-			//TODO: instead of just scanning to the :, read in the buffer length. The device formats the message like this:
-			//	+IPD,#,DATALEN:DATA
-			//	Where # is normally 0. So we could scan to the second comma and return the number that follows
-            boolean result = find(F(":"));
+            //The device formats the message like this:
+            //  +IPD,#,DATALEN:DATA
+            //  Where # is normally 0.
             //Scan until we get a : symbol (end of IPD, start of data)
+            boolean result = find(F(":"));
             if (!result)
             {
                 return result;
             }
         }
     }
-    for (tLastGoodData = millis(); !found;)
+    tLastGoodData = millis();
+    while (!found)
     {
 
         //If the caller gave "\0" as the string to find, then this function was
@@ -234,20 +237,20 @@ boolean SimpleESP8266::find(EspStr *search_str, boolean ipd, boolean verbose)
             bytesRead = stream_->readBytes(buffer, bytesAvailable);
             if (bytesRead != bytesAvailable && debug_)
             {
-                debug_->print(F("Received "));
+                debug_->print(DEBUG_STR("Received "));
                 debug_->print(bytesRead);
-                debug_->print(F(" bytes, expected "));
+                debug_->print(DEBUG_STR(" bytes, expected "));
                 debug_->println(bytesAvailable);
 
             }
             //null terminate the string for easy printing
-            buffer[bytesAvailable] = '\0';
+            buffer[bytesRead] = '\0';
             if (debug_ && verbose)
             {
                 debug_->print(indent_);
-                debug_->print(F("Got "));
+                debug_->print(DEBUG_STR("Got "));
                 debug_->print(bytesAvailable);
-                debug_->print(F(" bytes: "));
+                debug_->print(DEBUG_STR(" bytes: "));
                 debug_->println(buffer);
             }
             //Compare the received buffer to the requested string
@@ -258,8 +261,9 @@ boolean SimpleESP8266::find(EspStr *search_str, boolean ipd, boolean verbose)
                 if (c == pgm_read_byte((Pchr *)search_str +
                                        matchedLength))
                 {
+                    matchedLength++;
                     // Matched whole string?
-                    if (++matchedLength == stringLength)
+                    if (matchedLength == stringLength)
                     {
                         //The string was fully matched
                         found = true;
@@ -288,15 +292,15 @@ boolean SimpleESP8266::find(EspStr *search_str, boolean ipd, boolean verbose)
     {
         if (found)
         {
-            debug_->println(F("found"));
+            debug_->println(DEBUG_STR("found"));
         } else if (timedOut)
         {
-            debug_->println(F("not found (timeout)"));
+            debug_->println(DEBUG_STR("not found (timeout)"));
         } else if (ipd_fail) {
             //don't print anything, it was already done
         } else
         {
-            debug_->println(F("not found (unspecified reason)"));
+            debug_->println(DEBUG_STR("not found (unspecified)"));
         }
     }
 
@@ -326,7 +330,7 @@ int SimpleESP8266::readLine(char *buf, int buf_size)
     int bytesRead = 1;
     if (debug_ && writing_)
     {
-        debug_->println(F("<-S-"));
+        debug_->println(DEBUG_STR("<-S-"));
     }
     writing_ = false;
     buf[0] = '\0';
@@ -339,11 +343,10 @@ int SimpleESP8266::readLine(char *buf, int buf_size)
     if (debug_)
     {
         debug_->print(indent_);
-        debug_->print(F("-R->"));
+        debug_->print(DEBUG_STR("-R->"));
         escapedDebugPrint(buf);
-        debug_->println(F("<-R-"));
+        debug_->println(DEBUG_STR("<-R-"));
     }
-    //while (stream_->read() != '\n'); // Discard thru newline
     return bytesRead;
 }
 
@@ -391,7 +394,7 @@ boolean SimpleESP8266::hardReset(void)
     pinMode(reset_pin_, OUTPUT); // Open drain; reset -> GND
     delay(10);                  // Hold a moment
     pinMode(reset_pin_, INPUT);  // Back to high-impedance pin state
-    found = find(boot_marker_);    // Purge boot message from stream_
+    found = find((EspStr*)defaultBootMarker);    // Purge boot message from stream_
                                  //Discard any remaining bytes in the stream_
     clearStreamBuffer();
     return found;
@@ -405,7 +408,7 @@ boolean SimpleESP8266::softReset(void)
     setTimeouts(reset_timeout_);    // reset time is longer than normal I/O.
     this->println(F("AT+RST"));            // Issue soft-reset command
     // Wait for boot message
-    if (find(boot_marker_))
+    if (find((EspStr*)defaultBootMarker))
     {
         //Wait for any other post-boot messages
         delay(1000);
@@ -413,7 +416,7 @@ boolean SimpleESP8266::softReset(void)
         if (debug_)
         {
             debug_->print(indent_);
-            debug_->print(F("Turning echo off..."));
+            debug_->print(DEBUG_STR("Echo off"));
         }
         this->println(F("ATE0"));            // Turn off echo
         found = find();                // OK?
@@ -433,7 +436,7 @@ void SimpleESP8266::debugLoop(void)
         return;
     }
 
-    debug_->println(F("\n========================"));
+    debug_->println(DEBUG_STR("\n="));
     for (;;)
     {
         if (debug_->available())
@@ -472,14 +475,14 @@ boolean SimpleESP8266::connectToAP(EspStr *ssid, EspStr *pass)
         if (debug_)
         {
             debug_->print(indent_);
-            debug_->println(F("Associated with AP"));
+            debug_->println(DEBUG_STR("Associated with AP"));
         }
         this->println(F("AT+CIPMUX=0"));     // Set single-client mode
         found = find();                // Await 'OK'
         if (debug_)
         {
             debug_->print(indent_);
-            debug_->println(F("Set to single-client mode"));
+            debug_->println(DEBUG_STR("Set to single-client mode"));
         }
     }
     return found;
@@ -491,19 +494,19 @@ void SimpleESP8266::closeAP(void)
     find(); // Purge 'OK'
 }
 
-// Open TCP connection.  Hostname is flash-resident string.
+// Open TCP connection to an already-listening host.  Hostname is flash-resident string.
 // Returns true on successful connection, else false.
-boolean SimpleESP8266::connectTCP(EspStr *h, int port)
+boolean SimpleESP8266::connectTCP(EspStr *hostname, int port)
 {
 
     this->print(F("AT+CIPSTART=\"TCP\",\""));
-    this->print(h);
+    this->print(hostname);
     this->print(F("\","));
     this->println(port);
 
     if (find())
     {
-        host_ = h;
+        host_ = hostname;
         return true;
     }
     return false;
@@ -595,7 +598,7 @@ int32_t SimpleESP8266::tcpRecv(char *buffer, uint32_t buffer_len)
 
 
 // Close previously accepted TCP stream
-// Returns true on successful connection, else false.
+// Returns true on successful unaccept, else false.
 boolean SimpleESP8266::unacceptTCP()
 {
 
@@ -644,6 +647,7 @@ boolean SimpleESP8266::requestURL(EspStr *url)
 boolean SimpleESP8266::requestURL(char* url)
 {
     this->print(F("AT+CIPSEND="));
+    //25 indicates length of total message, and is sizeof("GET HTTP/1.1\r\nHost: \r\n\r\n")
     this->println(25 + strlen(url) + strlen_P((Pchr *)host_));
     if (find(F("> ")))
     { // Wait for prompt
@@ -660,56 +664,50 @@ boolean SimpleESP8266::requestURL(char* url)
 boolean SimpleESP8266::setupTcpServer(EspStr *ssid, EspStr* password, uint16_t port)
 {
     // Test if module is ready
-    if (debug_) debug_->println(F("\r\nHard reset..."));
+    if (debug_) debug_->println(DEBUG_STR("\r\nHard reset"));
     if (!this->hardReset())
     {
-        if (debug_) debug_->println(F("no response from module"));
+        if (debug_) debug_->println(DEBUG_STR("no response from module"));
         return false;
     }
-    if (debug_) debug_->println(F("OK."));
+    if (debug_) debug_->println(DEBUG_STR("OK."));
 
-    if (debug_) debug_->print(F("\r\nSoft reset..."));
+    if (debug_) debug_->print(DEBUG_STR("\r\nSoft reset"));
     if (!this->softReset())
     {
-        if (debug_) debug_->println(F("no response from module."));
+        if (debug_) debug_->println(DEBUG_STR("no response from module."));
         return false;
     }
-    if (debug_) debug_->println(F("OK."));
+    if (debug_) debug_->println(DEBUG_STR("OK."));
 
-    //if (debug_) debug_->print(F("\r\nSetting up UART..."));
-    //this->setupUART();
-    //this->clearStreamBuffer();
-    //if (debug_) debug_->println(F("done"));
-
-    if (debug_) debug_->print(F("\r\nConnecting to WiFi..."));
+    if (debug_) debug_->print(DEBUG_STR("\r\nConnect to WiFi"));
     if (this->connectToAP(ssid, password))
     {
         char buffer[40];
         // IP addr check isn't part of library yet, but
         // we can manually request and place in a string.
-        if (debug_) debug_->print(F("OK\nChecking IP addr..."));
+        if (debug_) debug_->print(DEBUG_STR("OK\nCheck IP addr"));
         this->println(F("AT+CIFSR"));
         if (this->readLine(buffer, sizeof(buffer)))
         {
             this->find(); // Discard the 'OK' that follows
 
-            if (debug_) debug_->print(F("Accepting TCP connection"));
+            if (debug_) debug_->print(DEBUG_STR("Accept TCP conn"));
             if (this->acceptTCP(port))
             {
-                if (debug_) debug_->println(F("TCP connection accepted"));
+                if (debug_) debug_->println(DEBUG_STR("TCP conn accepted"));
                 return true;
             } else
             { // TCP connect failed
-                if (debug_) debug_->println(F("Failed to accept TCP connection"));
+                if (debug_) debug_->println(DEBUG_STR("Fail to accept TCP conn"));
             }
         } else
         { // IP addr check failed
-            if (debug_) debug_->println(F("Failed to read IP addrss"));
+            if (debug_) debug_->println(DEBUG_STR("Fail to read IP addr"));
         }
-        //wifi.closeAP();
     } else
     { // WiFi connection failed
-        if (debug_) debug_->println(F("Failed to connect to AP"));
+        if (debug_) debug_->println(DEBUG_STR("Fail to connect to AP"));
     }
     return false;
 }

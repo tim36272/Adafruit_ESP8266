@@ -14,18 +14,18 @@ Written by Limor Fried and Phil Burgess for Adafruit Industries.
 MIT license, all text above must be included in any redistribution.
 ------------------------------------------------------------------------*/
 
-#ifndef _SimpleESP8266_H_
-#define _SimpleESP8266_H_
+#ifndef SimpleESP8266_H
+#define SimpleESP8266_H
 //Override the serial buffer size in Arduino
 //#undef SERIAL_RX_BUFFER_SIZE
 //#define SERIAL_RX_BUFFER_SIZE 256
 #include <Arduino.h>
 
-#define ESP_RECEIVE_TIMEOUT   5000L     //Time (in milliseconds) to wait for generic responses from the device
-#define ESP_RESET_TIMEOUT     5000L     //Time (in milliseconds) to wait for device to reboot during a soft reset
-#define ESP_CONNECT_TIMEOUT   15000L    //Time (in milliseconds) to wait for access point associtation to complete
-#define ESP_CLIENT_TIMEOUT    7200000L  //Time (in milliseconds) to wait for a TCP connection
-#define ESP_DATA_TIMEOUT      7200000L  //Time (in milliseconds) to wait for data after TCP connection established
+#define ESP_RECEIVE_TIMEOUT   5000     //Time (in milliseconds) to wait for generic responses from the device
+#define ESP_RESET_TIMEOUT     5000     //Time (in milliseconds) to wait for device to reboot during a soft reset
+#define ESP_CONNECT_TIMEOUT   15000    //Time (in milliseconds) to wait for access point associtation to complete
+#define ESP_CLIENT_TIMEOUT    7200000  //Time (in milliseconds) to wait for a TCP connection
+#define ESP_DATA_TIMEOUT      7200000  //Time (in milliseconds) to wait for data after TCP connection established
 
 #ifdef _VMICRO_INTELLISENSE
     //The VMICRO environment doesn't have an accurate F definition, so replace it here
@@ -34,7 +34,7 @@ MIT license, all text above must be included in any redistribution.
 #endif
 typedef const __FlashStringHelper EspStr; // PROGMEM/flash-resident string
 
-#define defaultBootMarker F("ready\r\n")
+const char defaultBootMarker[] PROGMEM = "ready\r\n";
 
 // Subclassing Print makes debugging easier -- output en route to
 // WiFi module can be duplicated on a second stream (e.g. Serial).
@@ -62,7 +62,6 @@ public:
                         uint32_t client_timeout = 0, 
                         uint32_t data_timeout = 0);
     void    setDefaultTimeouts();
-    void    setBootMarker(EspStr *s = NULL);
     void    clearStreamBuffer();
     void    setDebug(Stream *debug = NULL);
 
@@ -81,11 +80,10 @@ private:
     uint32_t  data_timeout_;
     int8_t    reset_pin_;  // -1 if RST not connected
     EspStr    *host_;       // Non-NULL when TCP connection open
-    const EspStr    *boot_marker_; // String indicating successful boot
     boolean   writing_;
     virtual size_t write(uint8_t);
     void     escapedDebugPrint(char* str);
     void     escapedDebugWrite(char c);
 };
 
-#endif // _SimpleESP8266_H_
+#endif // SimpleESP8266_H
